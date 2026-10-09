@@ -1,6 +1,6 @@
 # Fullsize Input Text Card
 
-A Home Assistant dashboard card that shows an `input_text` (or `text`) entity as a plain text field filling the whole card. No card-mod needed.
+A Home Assistant dashboard card that shows an `input_text` (or `text`) entity as a plain text area filling the whole card. Text starts at the top and wraps onto the next line. No card-mod needed.
 
 ## Install with HACS
 
@@ -25,8 +25,10 @@ type: custom:fullsize-input-text-card
 entity: input_text.sent_voice_notification
 grid_options:
   columns: 8
-  rows: 1
+  rows: 2
 ```
+
+One row shows one line of text; each extra row adds room for about two more lines.
 
 ## Options
 
@@ -35,11 +37,14 @@ grid_options:
 | `entity`      | yes      |                      | An `input_text` or `text` entity.                    |
 | `placeholder` | no       | entity friendly name | Grey text shown when the field is empty.             |
 | `font_size`   | no       | `16px`               | Text size, for example `18px`.                       |
+| `background`  | no       | theme input grey     | Field colour, for example `none` or `#2a2a2a`.       |
 | `border`      | no       | `false`              | Show the normal card border (highlights on focus).   |
 
 ## Behaviour
 
-- The value is saved when you press Enter or leave the field.
-- Escape discards what you typed and restores the stored value.
-- The entity's maximum length, pattern and password mode are respected.
+- The value is saved as you type, about 0.3 seconds after the last keystroke, and at once when you press Enter or leave the field.
+- The field has the same grey fill as Home Assistant's own input fields.
+- Text starts at the top of the card and wraps onto the next line. If there is more text than fits, the field scrolls.
+- Enter saves and leaves the field; it does not add a line break, because the entity holds a single line.
+- The entity's maximum length and password mode are respected. A value the entity rejects (for example one that breaks its pattern) is put back to the stored value.
 - The field fills the card, so its height follows `grid_options.rows`.

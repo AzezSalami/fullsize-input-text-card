@@ -1,14 +1,16 @@
 /*
  * Fullsize Input Text Card
  * A Home Assistant dashboard card that shows an input_text (or text) entity
- * as a plain text field filling the whole card.
+ * as a plain text area filling the whole card. Text starts at the top and
+ * wraps onto the next line.
  *
  * type: custom:fullsize-input-text-card
  * entity: input_text.my_text
  */
 
 const CARD_TAG = "fullsize-input-text-card";
-const CARD_VERSION = "1.0.0";
+const CARD_VERSION = "1.2.0";
+const SAVE_DELAY_MS = 300;
 const SUPPORTED_DOMAINS = ["input_text", "text"];
 
 class FullsizeInputTextCard extends HTMLElement {
@@ -19,6 +21,13 @@ class FullsizeInputTextCard extends HTMLElement {
     this._hass = undefined;
     this._input = undefined;
     this._lastStateObj = undefined;
+    this._saveTimer = undefined;
+    this._pending = 0;
+  }
+
+  disconnectedCallback() {
+    // Save anything still waiting when the card is removed.
+    this._flush();
   }
 
   /* ---------- Home Assistant card API ---------- */
@@ -40,6 +49,7 @@ class FullsizeInputTextCard extends HTMLElement {
         },
         { name: "placeholder", selector: { text: {} } },
         { name: "font_size", selector: { text: {} } },
+        { name: "background", selector: { text: {} } },
         { name: "border", selector: { boolean: {} } },
       ],
     };
@@ -90,6 +100,16 @@ class FullsizeInputTextCard extends HTMLElement {
         min-height: 56px;
         box-sizing: border-box;
         overflow: hidden;
+        background: var(
+          --fullsize-input-background,
+          var(
+            --ha-color-form-background,
+            var(
+              --input-fill-color,
+              var(--mdc-text-field-fill-color, rgba(127, 127, 127, 0.12))
+            )
+          )
+        );
       }
       ha-card.no-border {
         border: none;
@@ -97,14 +117,21 @@ class FullsizeInputTextCard extends HTMLElement {
       ha-card.with-border:focus-within {
         border-color: var(--primary-color);
       }
-      input {
+      textarea {
+        display: block;
         flex: 1;
         min-width: 0;
         width: 100%;
         height: 100%;
         margin: 0;
-        padding: 0 16px;
+        padding: 16px;
         box-sizing: border-box;
+        resize: none;
+        overflow-x: hidden;
+        overflow-y: auto;
+        scrollbar-width: thin;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
         border: none;
         outline: none;
         background: transparent;
@@ -112,15 +139,18 @@ class FullsizeInputTextCard extends HTMLElement {
         caret-color: var(--primary-color);
         font-family: inherit;
         font-size: var(--fullsize-input-font-size, 16px);
-        line-height: normal;
+        line-height: 1.5;
         -webkit-appearance: none;
         appearance: none;
       }
-      input::placeholder {
+      textarea.password {
+        -webkit-text-security: disc;
+      }
+      textarea::placeholder {
         color: var(--secondary-text-color);
         opacity: 0.7;
       }
-      input:disabled {
+      textarea:disabled {
         color: var(--disabled-text-color);
         cursor: not-allowed;
       }
@@ -128,9 +158,15 @@ class FullsizeInputTextCard extends HTMLElement {
 
     const card = document.createElement("ha-card");
     card.classList.add(this._config.border ? "with-border" : "no-border");
+    if (this._config.background) {
+      card.style.setProperty(
+        "--fullsize-input-background",
+        String(this._config.background)
+      );
+    }
 
-    const input = document.createElement("input");
-    input.type = "text";
+    const input = document.createElement("textarea");
+    input.rows = 1;
     input.autocomplete = "off";
     if (this._config.font_size) {
       input.style.setProperty(
@@ -139,12 +175,22 @@ class FullsizeInputTextCard extends HTMLElement {
       );
     }
 
-    input.addEventListener("change", () => this._commit());
+    // Save while typing (shortly after the last keystroke), and at once
+    // when the field is left or Enter is pressed.
+    input.addEventListener("input", () => {
+      // The entity holds a single line: turn pasted line breaks into spaces.
+      if (/[\r\n]/.test(input.value)) {
+        const pos = input.selectionStart;
+        input.value = input.value.replace(/\r\n|\r|\n/g, " ");
+        input.setSelectionRange(pos, pos);
+      }
+      this._scheduleSave();
+    });
+    input.addEventListener("change", () => this._flush());
+    input.addEventListener("blur", () => this._flush());
     input.addEventListener("keydown", (ev) => {
       if (ev.key === "Enter") {
-        input.blur();
-      } else if (ev.key === "Escape") {
-        input.value = this._stateValue();
+        ev.preventDefault();
         input.blur();
       }
     });
@@ -186,17 +232,12 @@ class FullsizeInputTextCard extends HTMLElement {
 
     const attrs = stateObj.attributes || {};
     input.disabled = stateObj.state === "unavailable";
-    input.type = attrs.mode === "password" ? "password" : "text";
+    input.classList.toggle("password", attrs.mode === "password");
 
     if (typeof attrs.max === "number") {
       input.maxLength = attrs.max;
     } else {
       input.removeAttribute("maxlength");
-    }
-    if (attrs.pattern) {
-      input.pattern = attrs.pattern;
-    } else {
-      input.removeAttribute("pattern");
     }
 
     input.placeholder =
@@ -204,15 +245,31 @@ class FullsizeInputTextCard extends HTMLElement {
         ? String(this._config.placeholder)
         : attrs.friendly_name || "";
 
-    // Do not overwrite what the user is typing.
+    // Do not overwrite what the user is typing, or a value still being saved.
     const focused = this.shadowRoot.activeElement === input;
+    const busy = this._pending > 0 || this._saveTimer !== undefined;
     const value = this._stateValue();
-    if (!focused && input.value !== value) {
+    if (!focused && !busy && input.value !== value) {
       input.value = value;
     }
   }
 
   /* ---------- saving ---------- */
+
+  _scheduleSave() {
+    clearTimeout(this._saveTimer);
+    this._saveTimer = setTimeout(() => {
+      this._saveTimer = undefined;
+      this._commit();
+    }, SAVE_DELAY_MS);
+  }
+
+  _flush() {
+    if (this._saveTimer === undefined) return;
+    clearTimeout(this._saveTimer);
+    this._saveTimer = undefined;
+    this._commit();
+  }
 
   _commit() {
     const input = this._input;
@@ -224,19 +281,33 @@ class FullsizeInputTextCard extends HTMLElement {
     const value = input.value;
     if (value === this._stateValue()) return;
 
+    // Too short to be accepted yet: wait for more typing.
+    const min = (stateObj.attributes || {}).min;
+    if (typeof min === "number" && value.length < min) return;
+
     const domain = this._config.entity.split(".")[0];
     const result = this._hass.callService(domain, "set_value", {
       entity_id: this._config.entity,
       value: value,
     });
 
-    // If Home Assistant rejects the value (too short, wrong pattern...),
-    // put the stored value back.
-    if (result && typeof result.catch === "function") {
-      result.catch(() => {
-        input.value = this._stateValue();
-      });
-    }
+    if (!result || typeof result.then !== "function") return;
+
+    this._pending += 1;
+    const done = (failed) => {
+      this._pending -= 1;
+      if (this._pending > 0 || this._saveTimer !== undefined) return;
+      // Once nothing is being saved and the user has left the field, show
+      // what Home Assistant actually stored (this also undoes a rejected
+      // value, e.g. one that does not match the entity's pattern).
+      if (failed || this.shadowRoot.activeElement !== input) {
+        this._update(true);
+      }
+    };
+    result.then(
+      () => done(false),
+      () => done(true)
+    );
   }
 }
 
