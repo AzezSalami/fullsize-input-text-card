@@ -24,6 +24,8 @@ A Home Assistant dashboard card that shows an `input_text` (or `text`) entity as
 type: custom:fullsize-input-text-card
 entity: input_text.sent_voice_notification
 grid_options:
+label: Voice notification
+grid_options:
   columns: 8
   rows: 2
 ```
@@ -35,6 +37,7 @@ One row shows one line of text; each extra row adds room for about two more line
 | Option        | Required | Default              | What it does                                         |
 | ------------- | -------- | -------------------- | ---------------------------------------------------- |
 | `entity`      | yes      |                      | An `input_text` or `text` entity.                    |
+| `label`       | no       | none                 | Small title shown at the top of the field.           |
 | `placeholder` | no       | entity friendly name | Grey text shown when the field is empty.             |
 | `font_size`   | no       | `16px`               | Text size, for example `18px`.                       |
 | `background`  | no       | theme input grey     | Field colour, for example `none` or `#2a2a2a`.       |

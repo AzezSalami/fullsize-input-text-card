@@ -9,7 +9,7 @@
  */
 
 const CARD_TAG = "fullsize-input-text-card";
-const CARD_VERSION = "1.2.0";
+const CARD_VERSION = "1.3.0";
 const SAVE_DELAY_MS = 300;
 const SUPPORTED_DOMAINS = ["input_text", "text"];
 
@@ -47,6 +47,7 @@ class FullsizeInputTextCard extends HTMLElement {
           required: true,
           selector: { entity: { domain: SUPPORTED_DOMAINS } },
         },
+        { name: "label", selector: { text: {} } },
         { name: "placeholder", selector: { text: {} } },
         { name: "font_size", selector: { text: {} } },
         { name: "background", selector: { text: {} } },
@@ -96,6 +97,7 @@ class FullsizeInputTextCard extends HTMLElement {
       }
       ha-card {
         display: flex;
+        flex-direction: column;
         height: 100%;
         min-height: 56px;
         box-sizing: border-box;
@@ -117,10 +119,31 @@ class FullsizeInputTextCard extends HTMLElement {
       ha-card.with-border:focus-within {
         border-color: var(--primary-color);
       }
+      label {
+        flex: none;
+        display: block;
+        padding: 8px 16px 0;
+        font-family: inherit;
+        font-size: 12px;
+        line-height: 16px;
+        color: var(--secondary-text-color);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        cursor: text;
+      }
+      ha-card:focus-within label {
+        color: var(--primary-color);
+      }
+      label + textarea {
+        padding-top: 0;
+        padding-bottom: 8px;
+      }
       textarea {
         display: block;
         flex: 1;
         min-width: 0;
+        min-height: 0;
         width: 100%;
         height: 100%;
         margin: 0;
@@ -195,6 +218,20 @@ class FullsizeInputTextCard extends HTMLElement {
       }
     });
 
+    input.id = "field";
+    const labelText =
+      this._config.label === undefined || this._config.label === null
+        ? ""
+        : String(this._config.label).trim();
+    if (labelText) {
+      const label = document.createElement("label");
+      label.htmlFor = "field";
+      label.textContent = labelText;
+      card.appendChild(label);
+    } else if (this._config.placeholder === undefined) {
+      input.setAttribute("aria-label", this._config.entity);
+    }
+    this._hasLabel = Boolean(labelText);
     card.appendChild(input);
     root.appendChild(style);
     root.appendChild(card);
@@ -240,9 +277,12 @@ class FullsizeInputTextCard extends HTMLElement {
       input.removeAttribute("maxlength");
     }
 
+    // With a label the field needs no placeholder unless one is given.
     input.placeholder =
       this._config.placeholder !== undefined
         ? String(this._config.placeholder)
+        : this._hasLabel
+        ? ""
         : attrs.friendly_name || "";
 
     // Do not overwrite what the user is typing, or a value still being saved.
