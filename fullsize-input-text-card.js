@@ -9,7 +9,7 @@
  */
 
 const CARD_TAG = "fullsize-input-text-card";
-const CARD_VERSION = "1.3.0";
+const CARD_VERSION = "0.1.0";
 const SAVE_DELAY_MS = 300;
 const SUPPORTED_DOMAINS = ["input_text", "text"];
 
